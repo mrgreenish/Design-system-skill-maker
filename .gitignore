@@ -1,0 +1,7 @@
+node_modules
+.figma-cache/
+.sync-plan.json
+sync-conflict.md
+dist
+storybook-static
+.DS_Store

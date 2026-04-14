@@ -1,0 +1,37 @@
+import { Meta, ColorPalette, ColorItem } from "@storybook/blocks";
+
+<Meta title="Tokens/Colors" />
+
+# Colors
+
+Swatches are rendered from `src/styles/tokens.css` via the `storybook-design-token` addon.
+Use the Design Tokens panel in the Storybook toolbar for copy-ready CSS, Tailwind, and hex values.
+
+<ColorPalette>
+  <ColorItem
+    title="Brand · primary"
+    subtitle="color.brand.primary.*"
+    colors={{
+      "500": "var(--color-brand-primary-500)",
+      "600": "var(--color-brand-primary-600)",
+    }}
+  />
+  <ColorItem
+    title="Neutral"
+    subtitle="color.neutral.*"
+    colors={{
+      "0": "var(--color-neutral-0)",
+      "50": "var(--color-neutral-50)",
+      "900": "var(--color-neutral-900)",
+    }}
+  />
+  <ColorItem
+    title="Semantic"
+    subtitle="color.semantic.*"
+    colors={{
+      "bg.default": "var(--color-semantic-bg-default)",
+      "fg.default": "var(--color-semantic-fg-default)",
+      "accent.default": "var(--color-semantic-accent-default)",
+    }}
+  />
+</ColorPalette>

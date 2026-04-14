@@ -1,0 +1,51 @@
+import { Meta } from "@storybook/blocks";
+
+<Meta title="Tokens/Shadows & Motion" />
+
+# Shadows
+
+<div style={{ display: "flex", gap: "var(--space-6)", padding: "var(--space-4)" }}>
+  {["sm","md"].map((k) => (
+    <div
+      key={k}
+      style={{
+        width: 120, height: 120,
+        background: "var(--color-neutral-0)",
+        borderRadius: "var(--radius-md)",
+        boxShadow: `var(--shadow-${k})`,
+        display: "grid", placeItems: "center",
+        fontFamily: "var(--font-family-sans)",
+      }}
+    >
+      shadow.{k}
+    </div>
+  ))}
+</div>
+
+# Motion
+
+<p style={{ fontFamily: "var(--font-family-sans)" }}>
+  Hover the swatches — transitions use <code>--motion-duration-*</code> and
+  <code>--motion-easing-standard</code>.
+</p>
+
+<div style={{ display: "flex", gap: "var(--space-4)" }}>
+  {["fast", "normal"].map((k) => (
+    <div
+      key={k}
+      style={{
+        width: 120, height: 60,
+        background: "var(--color-brand-primary-500)",
+        borderRadius: "var(--radius-md)",
+        transition: `transform var(--motion-duration-${k}) var(--motion-easing-standard)`,
+        color: "var(--color-neutral-0)",
+        display: "grid", placeItems: "center",
+        fontFamily: "var(--font-family-sans)",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-6px)")}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+    >
+      duration.{k}
+    </div>
+  ))}
+</div>

@@ -1,0 +1,6 @@
+{
+  "$description": "Per-token hash from the last successful sync. Used by scripts/sync.ts to detect three-way conflicts. Do not hand-edit.",
+  "version": 1,
+  "syncedAt": null,
+  "hashes": {}
+}
