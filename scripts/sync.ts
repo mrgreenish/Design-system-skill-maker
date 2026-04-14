@@ -31,6 +31,7 @@ import { flatten, hashAll, type DtcgGroup } from "./tokens.ts";
 import { diffTokens, summarize, type DiffEntry } from "./diff-tokens.ts";
 import { figmaToFlat, loadCache } from "./figma-read.ts";
 import { buildPlan, type WritePlan } from "./figma-write.ts";
+import { selectSyncWork } from "./sync-direction.ts";
 import { run as regenerateCode } from "./tokens-to-tailwind.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -96,21 +97,17 @@ async function main() {
     process.exit(2);
   }
 
-  // Decide direction.
-  const wantCodeToFigma =
-    args.direction === "code-to-figma" ||
-    (args.direction === "auto" && summary.oneSided.some((e) => e.status.endsWith("-code")));
-  const wantFigmaToCode =
-    args.direction === "figma-to-code" ||
-    (args.direction === "auto" && summary.oneSided.some((e) => e.status.endsWith("-figma")));
+  const work = selectSyncWork(args.direction, diff);
+  const wantCodeToFigma = work.codeToFigma.length > 0;
+  const wantFigmaToCode = work.figmaToCode.length > 0;
 
   if (wantFigmaToCode && !args.dryRun) {
-    applyFigmaToCode(tree, figmaFlat, diff);
+    applyFigmaToCode(tree, figmaFlat, work.figmaToCode);
     await regenerateCode();
   }
 
   if (wantCodeToFigma) {
-    const plan: WritePlan = buildPlan(diff, codeFlat, cache?.fileKey);
+    const plan: WritePlan = buildPlan(work.codeToFigma, codeFlat, cache?.fileKey);
     if (!args.dryRun) {
       writeFileSync(PLAN, JSON.stringify(plan, null, 2));
       console.log(`[sync] wrote ${PLAN} (${plan.operations.length} op(s), ${plan.manual.length} manual)`);
