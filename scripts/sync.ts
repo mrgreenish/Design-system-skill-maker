@@ -105,7 +105,7 @@ async function main() {
     (args.direction === "auto" && summary.oneSided.some((e) => e.status.endsWith("-figma") || e.status === "removed-code"));
 
   if (wantFigmaToCode && !args.dryRun) {
-    applyFigmaToCode(tree, figmaFlat);
+    applyFigmaToCode(tree, figmaFlat, diff);
     await regenerateCode();
   }
 
@@ -176,14 +176,20 @@ function writeConflictReport(diff: DiffEntry[]) {
 }
 
 /**
- * Overwrite tokens.json leaves with figma values for any path where Figma is
- * the winner (added-figma / changed-figma / removed-code). We only edit leaves —
- * group structure and aliases are preserved.
+ * Apply Figma-side wins to the tokens.json tree: update existing leaves,
+ * insert new tokens (added-figma / removed-code), and delete tokens removed
+ * in Figma (removed-figma).
  */
-function applyFigmaToCode(tree: DtcgGroup, figmaFlat: Array<{ path: string; type: string; rawValue: unknown }>) {
+function applyFigmaToCode(
+  tree: DtcgGroup,
+  figmaFlat: Array<{ path: string; type: string; rawValue: unknown }>,
+  diff: DiffEntry[],
+) {
   const figmaByPath = new Map(figmaFlat.map((t) => [t.path, t]));
-  // Walk tree, update leaves present in figmaByPath.
-  function walk(node: DtcgGroup, path: string[]) {
+  const statusByPath = new Map(diff.map((d) => [d.path, d.status]));
+
+  // 1. Walk existing tree — update leaves that Figma changed.
+  function walkUpdate(node: DtcgGroup, path: string[]) {
     for (const [key, child] of Object.entries(node)) {
       if (key.startsWith("$")) continue;
       const p = [...path, key].join(".");
@@ -191,11 +197,40 @@ function applyFigmaToCode(tree: DtcgGroup, figmaFlat: Array<{ path: string; type
         const f = figmaByPath.get(p);
         if (f) (child as { $value: unknown }).$value = f.rawValue;
       } else if (child && typeof child === "object") {
-        walk(child as DtcgGroup, [...path, key]);
+        walkUpdate(child as DtcgGroup, [...path, key]);
       }
     }
   }
-  walk(tree, []);
+  walkUpdate(tree, []);
+
+  // 2. Insert tokens that only exist in Figma (added-figma, removed-code).
+  for (const [path, f] of figmaByPath) {
+    const st = statusByPath.get(path);
+    if (st !== "added-figma" && st !== "removed-code") continue;
+    const parts = path.split(".");
+    let cur: DtcgGroup = tree;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!(parts[i] in cur) || typeof cur[parts[i]] !== "object") {
+        cur[parts[i]] = {};
+      }
+      cur = cur[parts[i]] as DtcgGroup;
+    }
+    const leaf = parts[parts.length - 1];
+    cur[leaf] = { $type: f.type, $value: f.rawValue } as unknown as DtcgGroup;
+  }
+
+  // 3. Remove tokens deleted in Figma (removed-figma).
+  for (const d of diff) {
+    if (d.status !== "removed-figma") continue;
+    const parts = d.path.split(".");
+    let cur: DtcgGroup = tree;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!(parts[i] in cur) || typeof cur[parts[i]] !== "object") break;
+      cur = cur[parts[i]] as DtcgGroup;
+    }
+    delete cur[parts[parts.length - 1]];
+  }
+
   writeFileSync(TOKENS, JSON.stringify(tree, null, 2) + "\n");
   console.log(`[sync] updated ${TOKENS} from Figma`);
 }

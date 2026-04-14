@@ -58,26 +58,14 @@ export function buildPlan(
       continue;
     }
 
-    if (e.status === "removed-figma") {
-      // Code has it, Figma doesn't — add to figma.
-      const t = codeByPath.get(e.path);
-      if (!t) continue;
-      const mapped = toFigma(t);
-      if (!mapped) {
-        manual.push({ name: pathToName(e.path), reason: `No Figma variable mapping for DTCG type "${t.type}"` });
-        continue;
-      }
-      ops.push({ op: "upsert-variable", name: pathToName(e.path), ...mapped, description: t.description });
-    } else if (e.status === "changed-code" || e.status === "added-code") {
-      const t = codeByPath.get(e.path);
-      if (!t) continue;
-      const mapped = toFigma(t);
-      if (!mapped) {
-        manual.push({ name: pathToName(e.path), reason: `No Figma variable mapping for DTCG type "${t.type}"` });
-        continue;
-      }
-      ops.push({ op: "upsert-variable", name: pathToName(e.path), ...mapped, description: t.description });
+    const t = codeByPath.get(e.path);
+    if (!t) continue;
+    const mapped = toFigma(t);
+    if (!mapped) {
+      manual.push({ name: pathToName(e.path), reason: `No Figma variable mapping for DTCG type "${t.type}"` });
+      continue;
     }
+    ops.push({ op: "upsert-variable", name: pathToName(e.path), ...mapped, description: t.description });
   }
 
   // Removals: tokens present in figma/lock but not in code.

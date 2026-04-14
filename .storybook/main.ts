@@ -11,7 +11,7 @@ import type { StorybookConfig } from "@storybook/react-vite";
  *            storybook-design-token react react-dom vite @vitejs/plugin-react
  */
 const config: StorybookConfig = {
-  stories: [".storybook/stories/**/*.mdx", ".storybook/stories/**/*.stories.@(ts|tsx)"],
+  stories: ["./stories/**/*.mdx", "./stories/**/*.stories.@(ts|tsx)"],
   addons: [
     "@storybook/addon-essentials",
     {

@@ -16,10 +16,19 @@ const REPO = resolve(import.meta.dirname, "..", "..");
 async function readStdin() {
   return await new Promise((r) => {
     let buf = "";
+    let resolved = false;
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      r(buf);
+    };
     process.stdin.on("data", (d) => (buf += d));
-    process.stdin.on("end", () => r(buf));
-    // If stdin is closed with nothing, resolve after a tick.
-    setTimeout(() => r(buf), 50);
+    process.stdin.on("end", done);
+    process.stdin.on("error", done);
+    // Safety net: if stdin never emits 'end' (e.g. TTY with no pipe), resolve
+    // after a generous timeout so the hook doesn't hang indefinitely.
+    const timer = setTimeout(done, 5000);
   });
 }
 
