@@ -1,22 +1,17 @@
 #!/usr/bin/env node
-// SessionStart hook. One-liner status so Claude knows whether the design
-// system is currently in sync. Never blocks session start.
+// SessionStart hook. If figma-map.json exists in the project root, prints a
+// one-line reminder so Claude knows a design system is active. Never blocks
+// session start.
 
-import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 
 const REPO = resolve(import.meta.dirname, "..", "..");
 
-if (!existsSync(resolve(REPO, "tokens.json"))) process.exit(0);
+if (existsSync(resolve(REPO, "figma-map.json"))) {
+  console.error(
+    "[ds:session-start] Design system active. Skills available: figma-to-code-design-system, code-to-figma-design-system",
+  );
+}
 
-const r = spawnSync("npx", ["tsx", "scripts/ds/sync.ts", "--dry-run"], {
-  cwd: REPO,
-  encoding: "utf8",
-  timeout: 15000,
-});
-const line = ((r.stdout ?? "") + (r.stderr ?? ""))
-  .split("\n")
-  .find((l) => l.includes("[sync]"));
-if (line) console.error(`[ds:session-start] ${line.trim()}`);
 process.exit(0);

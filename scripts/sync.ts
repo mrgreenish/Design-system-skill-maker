@@ -41,7 +41,7 @@ import { figmaToFlat, loadCache } from "./figma-read.ts";
 import { buildPlan, type WritePlan } from "./figma-write.ts";
 import { selectSyncWork } from "./sync-direction.ts";
 import { loadFigmaMap, isManualProtected, type FigmaMap } from "./figma-map.ts";
-import { run as regenerateCode } from "./tokens-to-tailwind.ts";
+import { run as regenerateCode } from "./tokens-build.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const TOKENS = resolve(ROOT, "tokens.json");

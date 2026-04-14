@@ -1,6 +1,6 @@
 ---
 name: figma-to-code-design-system
-description: Pulls design tokens from Figma into code. Reads Figma variables and text/effect styles via MCP, updates tokens.json, regenerates tailwind.config.ts (generated block) and src/styles/tokens.css, updates DESIGN.md, and scaffolds / updates Storybook with rich token-gallery stories. Use when Figma has changed and you want code to reflect those changes.
+description: Pulls design tokens from Figma into code. Reads Figma variables and text/effect styles via MCP, updates tokens.json, regenerates output files (CSS custom properties, and conditionally Tailwind config or SCSS based on outputFormats in figma-map.json), updates DESIGN.md, and scaffolds / updates Storybook with rich token-gallery stories. Use when Figma has changed and you want code to reflect those changes.
 ---
 
 # figma-to-code-design-system
@@ -20,94 +20,142 @@ Do NOT use this skill to push changes INTO Figma — that's `code-to-figma-desig
 
 ## Steps
 
-### 1. Refresh the Figma cache
+### 1. Read Figma state via MCP
 
 Call all available MCP read tools and write their output to the cache:
 
 a. **Variables**: `get_variable_defs` → write to `.figma-cache/variables.json`.
-   This is the primary source for color, dimension, fontFamily, fontWeight,
-   number, and duration tokens.
+   Primary source for color, dimension, fontFamily, fontWeight, number, duration tokens.
 
 b. **Text styles** (if available): `get_local_text_styles` → write to
-   `.figma-cache/text-styles.json`. Text styles carry the full typography
-   spec (family, size, weight, lineHeight, letterSpacing) even when these
-   aren't exposed as variables.
+   `.figma-cache/text-styles.json`. Carries the full typography spec (family,
+   size, weight, lineHeight, letterSpacing) even when not exposed as variables.
 
 c. **Effect styles** (if available): `get_local_effect_styles` → write to
-   `.figma-cache/effect-styles.json`. Effect styles carry shadow definitions.
+   `.figma-cache/effect-styles.json`. Carries shadow definitions.
 
-### 2. Dry-run the sync
+### 2. Load and flatten tokens.json
 
+Read `tokens.json` and build a flat map `{ [dtcgPath]: { type, value } }` by
+walking every nested key that contains a `$value` field. Resolve alias values
+(`{color.brand.primary}` → concrete hex) so comparisons are value-to-value.
+
+### 3. Compare Figma state to tokens.json
+
+For each Figma variable in the cache, derive its DTCG path following
+`_shared/token-conventions.md` and compare to the flat token map:
+
+- **New in Figma, absent in tokens.json** → add
+- **Value differs** → update (Figma wins for figma-to-code direction)
+- **Present in tokens.json, absent in Figma** → skip (never auto-delete; surface
+  as a note so the user can decide)
+- **Token type is `shadow` or `cubicBezier`** → skip (these don't round-trip
+  through Figma variables; handle via text/effect styles below)
+
+For text styles (`.figma-cache/text-styles.json` if present):
+- Map `fontFamily` → `font.family.{sans|serif|mono}`
+- Map `fontSize` → `font.size.{xs..5xl}`
+- Map `fontWeight` → `font.weight.{light|regular|medium|semibold|bold}`
+- Map `lineHeight` → `font.lineHeight.{tight..loose}`
+- Map `letterSpacing` → `letterSpacing.{tighter..widest}`
+- Additive only — never overwrite hand-crafted values that exist in tokens.json
+
+For effect styles (`.figma-cache/effect-styles.json` if present):
+- Map box shadows → `shadow.{xs|sm|md|lg|xl}` based on blur radius
+- Additive only
+
+Surface a concise summary of planned changes (e.g. "12 tokens to update, 3 to
+add, 2 tokens in tokens.json not found in Figma (kept)") and ask the user to
+confirm before writing.
+
+### 4. Write tokens.json
+
+Apply the confirmed changes directly to `tokens.json`. Preserve all existing
+keys outside the changed set — do not reformat or reorder untouched sections.
+
+### 5. Regenerate output files
+
+Read `figma-map.json` to get `outputFormats` (set by `setup-design-system`).
+If `outputFormats` is absent, auto-detect from `package.json` deps (same
+logic as `setup-design-system` Step 2.5).
+
+For each token in the updated `tokens.json`, derive:
+- CSS var name: replace dots with dashes, convert camelCase to kebab-case,
+  prefix with `--`. Example: `color.brand.primary.500` → `--color-brand-primary-500`
+- CSS value: use the resolved `$value` directly (colors as hex/oklch, dimensions
+  with unit, fontFamily as comma-separated list, shadow as the expanded shorthand)
+
+**Always — CSS custom properties:**
+
+Write `tokens.css` (path from `outputPaths.css` or default `src/styles/tokens.css`):
+```css
+/* GENERATED — do not edit */
+:root {
+  --color-brand-primary-500: #3b82f6;
+  --space-4: 1rem;
+  /* ... all tokens ... */
+}
 ```
-npm run ds:sync:dry -- --direction=figma-to-code
+
+**If `tailwind-v3` in `outputFormats`:**
+
+Splice the generated block into `tailwind.config.ts` between the
+`// BEGIN GENERATED` and `// END GENERATED` markers. The block exports
+`generatedTheme` with CSS `var()` references for every token category
+(colors, spacing, borderRadius, fontFamily, fontSize, fontWeight, lineHeight,
+letterSpacing, borderWidth, opacity, boxShadow, transitionDuration,
+transitionTimingFunction, screens, zIndex). Breakpoint values use raw values
+(not `var()`) because Tailwind processes them at build time.
+
+If `tailwind.config.ts` doesn't exist yet, create it with a minimal scaffold:
+```ts
+import type { Config } from "tailwindcss";
+// BEGIN GENERATED — do not edit
+export const generatedTheme = { /* ... */ };
+// END GENERATED
+const config: Config = {
+  content: ["./src/**/*.{ts,tsx,html,mdx}"],
+  theme: { extend: generatedTheme },
+  plugins: [],
+};
+export default config;
 ```
 
-Read the stdout summary. If conflicts > 0, stop and run the full sync
-(without `--dry-run`) to generate `sync-conflict.md`, then surface it
-to the user. Do not proceed until all conflicts are resolved.
+**If `tailwind-v4` in `outputFormats`:**
 
-### 3. Apply text style changes to tokens.json (if .figma-cache/text-styles.json exists)
-
-Text styles are not Figma variables, so `sync.ts` doesn't pick them up
-automatically. For each text style in the cache, derive the DTCG token paths
-following `_shared/token-conventions.md` and update `tokens.json` directly:
-
-- `fontFamily` → `font.family.{sans|serif|mono}`
-- `fontSize` → `font.size.{xs..5xl}` (map to nearest size stop or add new)
-- `fontWeight` → `font.weight.{light|regular|medium|semibold|bold}`
-- `lineHeight` → `font.lineHeight.{tight..loose}` (as a `number` type)
-- `letterSpacing` → `letterSpacing.{tighter..widest}` (as a `dimension` type with em unit)
-
-Only add new tokens or update changed ones — never delete tokens that exist in
-`tokens.json` but not in the Figma text styles (the designer may use hand-crafted
-values for some stops).
-
-### 4. Apply effect style changes to tokens.json (if .figma-cache/effect-styles.json exists)
-
-For each effect style that represents a box shadow:
-- Map to `shadow.{xs|sm|md|lg|xl}` based on blur radius and spread
-- Update the `shadow` composite token in `tokens.json`
-
-These are manual-protected — they won't be auto-pushed back to Figma.
-
-### 5. Run the full figma-to-code sync
-
+Append an `@theme { }` block after the `:root` block in `tokens.css`:
+```css
+@theme {
+  --color-brand-primary-500: #3b82f6;
+  --spacing-4: 1rem;
+  /* ... all tokens with their actual values ... */
+}
 ```
-npm run ds:sync -- --direction=figma-to-code
+No `tailwind.config.ts` is needed for v4.
+
+**If `scss` in `outputFormats`:**
+
+Write `_tokens.scss` (path from `outputPaths.scss` or default
+`src/styles/_tokens.scss`):
+```scss
+// GENERATED — do not edit
+$color-brand-primary-500: #3b82f6;
+$space-4: 1rem;
+// ...
 ```
+Variable names mirror the CSS var names with `$` prefix and no leading `--`.
 
-This reads `.figma-cache/variables.json`, diffs against `tokens.json` +
-`tokens.lock.json`, and updates `tokens.json`.
-
-### 6. Sanity-check `tokens.json`
-
-Run `npm run ds:sync:dry`. If it now shows `conflict`, stop and direct the
-user to resolve them first (see `sync-conflict.md`).
-
-### 7. Regenerate code
-
-```
-npm run ds:build
-```
-
-This writes:
-- `src/styles/tokens.css` — fully generated
-- `tailwind.config.ts` — only the `BEGIN GENERATED` / `END GENERATED` block
-  is replaced; everything outside those markers is preserved
-
-### 8. Update DESIGN.md
+### 6. Update DESIGN.md
 
 If `DESIGN.md` exists in the project root, update sections 2–6 to reflect
-the new token values. Leave sections 1, 7, 8, 9 unchanged (those require
-human review).
+the new token values. Leave sections 1, 7, 8, 9 unchanged.
 
-For each section, re-generate the tables and lists from the updated `tokens.json`:
 - **Section 2**: Rebuild color tables from `color.*` tokens
 - **Section 3**: Rebuild typography table from `font.*` and `letterSpacing.*`
 - **Section 5**: Rebuild spacing/radius tables from `space.*` and `radius.*`
 - **Section 6**: Rebuild shadow table from `shadow.*`
 
-### 9. Install Storybook if missing
+### 7. Install Storybook if missing
 
 If `.storybook/main.ts` exists but `node_modules/storybook` does not, run:
 
@@ -117,10 +165,7 @@ npm i -D storybook @storybook/react-vite @storybook/addon-essentials \
          react react-dom vite @vitejs/plugin-react
 ```
 
-These are intentionally NOT in `package.json` by default so token-only users
-don't pay the install cost.
-
-### 10. Update Storybook token stories
+### 8. Update Storybook token stories
 
 Create or update the following MDX story files in `.storybook/stories/`:
 
@@ -128,17 +173,14 @@ Create or update the following MDX story files in `.storybook/stories/`:
 - Color palette grid organized by hue family (brand, neutral, status, semantic)
 - Each swatch shows: CSS var name, hex value, and semantic role if applicable
 - Semantic section: shows bg/fg/border/interactive/status role names with their resolved colors
-- Based on the "Boodschappen" pattern: dark shades at top → light at bottom per family
 
 **Typography.stories.mdx**
 - Full type scale rendered at actual sizes
-- For each type stop: role name, sample text ("The quick brown fox jumps over the lazy dog"),
-  and specs (size / weight / line-height / letter-spacing)
+- For each type stop: role name, sample text, and specs (size / weight / line-height / letter-spacing)
 - Desktop/tablet/mobile columns where responsive sizes differ
-- Based on the Boodschappen typography documentation pattern
 
 **Spacing.stories.mdx**
-- Visual spacing blocks with proportional widths (like IBM Carbon's spacing spec)
+- Visual spacing blocks with proportional widths
 - Each row: token name | rem value | px value | proportional rectangle
 - Radius section: rounded squares showing each radius stop
 
@@ -149,50 +191,37 @@ Create or update the following MDX story files in `.storybook/stories/`:
 **Motion.stories.mdx**
 - Animated demo boxes cycling through each duration + easing combination
 
-### 11. Verify Storybook renders
+### 9. Report
 
-Run `npm run storybook -p 6006` (background) and open `http://localhost:6006`.
-Check that:
-- `Tokens/Colors` shows swatches for all `color.*` tokens grouped by family
-- `Tokens/Typography` renders the full type scale with responsive columns
-- `Tokens/Spacing & Radii` renders spacing bars + rounded squares
-- `Tokens/Shadows & Motion` renders shadow cards and animates on hover
-
-### 12. Commit the lock
-
-```
-tsx scripts/ds/sync.ts --commit-lock
-```
-
-### 13. Report
-
-Summarize to the user:
-- How many tokens changed (by group)
-- Which files changed
+Summarize:
+- How many tokens changed (by group: color N, space N, font N, …)
+- Which output files were written
 - Any text/effect styles extracted manually
-- Any tokens skipped (alias, manual-protected)
-- DESIGN.md sections updated
+- Any tokens in tokens.json not found in Figma (kept, not deleted)
+- DESIGN.md sections updated (or skipped if not present)
 
 ## Constraints
 
-- Never hand-edit `src/styles/tokens.css` or the generated block in
-  `tailwind.config.ts`. If the user asks to tweak a token, edit
-  `tokens.json` and re-run this skill.
-- Do not regenerate if `npm run ds:sync:dry` reports conflicts.
-- Text and effect style extraction in steps 3–4 is additive only — never
-  delete tokens that exist in `tokens.json` but not in the Figma cache.
+- Never hand-edit `tokens.css`, `_tokens.scss`, or the generated block in
+  `tailwind.config.ts`. If the user asks to tweak a token, edit `tokens.json`
+  and re-run this skill.
+- Text and effect style extraction is additive only — never delete tokens that
+  exist in `tokens.json` but not in the Figma cache.
+- Never auto-delete tokens that are absent from Figma — surface them as a note.
 
 ## Troubleshooting
 
 - **Tailwind typecheck error on `fontFamily`** — the generated block must
-  emit plain arrays (not `as const`); that's already handled by
-  `scripts/ds/tokens-to-tailwind.ts`.
+  emit plain arrays (not `as const`); wrap each font family entry in an array.
 - **Storybook Design Tokens panel empty** — ensure `.storybook/main.ts`
   points `storybook-design-token.glob` at `src/styles/tokens.css`.
 - **Text styles not syncing** — check that `.figma-cache/text-styles.json`
   was written in step 1. If the MCP doesn't expose a text-styles tool,
   extract them from `get_code` on a typography frame and manually update
   `tokens.json`.
-- **Shadow values not updating** — shadows are manual-protected. Update
+- **Shadow values not updating** — shadows are additive only. Update
   `tokens.json` directly with the new shadow values from the effect styles,
-  then re-run `npm run ds:build`.
+  then re-run step 5 to regenerate output files.
+- **outputFormats not set** — if `figma-map.json` has no `outputFormats`,
+  auto-detection from `package.json` is used. Run `setup-design-system` to
+  write an explicit `outputFormats` to `figma-map.json`.

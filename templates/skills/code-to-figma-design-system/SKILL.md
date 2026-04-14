@@ -20,46 +20,62 @@ Do NOT use this skill to pull Figma changes into code — use
 - `figma-map.json` present (produced by `setup-design-system`). If it's
   missing, stop and tell the user to run `setup-design-system` first.
 
+---
+
 ## Part A — Variable sync (tokens into Figma)
 
-### A1. Refresh the Figma cache
+### A1. Load tokens and current Figma state
 
-Call `get_variable_defs` for the file's variable collections (ids are in
-`figma-map.json`). Write the result to `.figma-cache/variables.json`.
+Read `tokens.json` and build a flat map `{ [dtcgPath]: { type, value } }` by
+walking every nested key with a `$value` field. Resolve all alias references
+so every value is concrete before comparing.
 
-### A2. Dry-run the sync
+Call `get_variable_defs` to get the current state of all variables in the
+Figma file. Build a parallel flat map from the Figma response.
 
-```
-npm run ds:sync:dry -- --direction=code-to-figma
-```
+Read `figma-map.json` for `fileKey`, `collections`, and per-token metadata
+(type overrides, unit hints, `syncCapability`).
 
-If conflicts > 0, stop. Run the full sync to generate `sync-conflict.md`,
-surface it to the user. Do not proceed until resolved.
+### A2. Identify changes
 
-### A3. Build the plan
+Compare the two flat maps and produce three lists:
 
-```
-tsx scripts/ds/sync.ts --direction=code-to-figma
-```
+**To create** — in `tokens.json` but absent from Figma variables.
+Skip tokens whose DTCG type is `shadow` or `cubicBezier` (these cannot be
+represented as Figma variables; move them to the manual list in A4).
 
-This writes `.sync-plan.json` with:
-- `operations` — variable upserts/deletes (executable via MCP)
-- `manual` — shadow/cubicBezier types that Figma variables can't represent
+**To update** — present in both, value differs.
+Skip `shadow` and `cubicBezier` types (move to manual list).
+Skip any token explicitly marked `syncCapability: "manual-protected"` in
+`figma-map.json` (move to manual list).
 
-### A4. Execute the plan
+**To delete** — in Figma but absent from `tokens.json`.
+Never auto-delete. Always list these and ask the user to confirm individually
+before proceeding.
 
-For each entry in `operations`:
-- `upsert-variable`: call `update_variable` if it exists in the cache,
-  else `create_variable`. Then call `set_variable_mode_value` to set the value.
-- `delete-variable`: call `delete_variable` only after user confirms (always
-  confirm deletions — they are destructive).
+Surface the three lists as a summary table and ask for confirmation before
+making any changes.
 
-Collect successes and failures. If a tool isn't available on the MCP server,
-move the op to the manual follow-up list.
+### A3. Execute the plan
 
-### A5. Handle manual items
+For each token in the **create** list:
+- Call `create_variable` with the appropriate collection and type
+- Call `set_variable_mode_value` to set the value in the default mode
 
-For shadows and easings (not backed by Figma variables), render a checklist:
+For each token in the **update** list:
+- Call `update_variable` if the variable already exists in the cache
+- Call `set_variable_mode_value` to update the value in the default mode
+
+For each confirmed **delete** (user must confirm each individually):
+- Call `delete_variable`
+
+Collect successes and failures. If a write tool is unavailable on the MCP
+server, move the op to the manual follow-up list.
+
+### A4. Handle manual items
+
+For shadows, easings, and any tokens that couldn't be written via MCP,
+render a checklist for the user to apply in Figma manually:
 
 ```
 Manual follow-up needed in Figma:
@@ -70,15 +86,13 @@ Manual follow-up needed in Figma:
 
 Do not block Part B on these manual items.
 
-### A6. Commit the lock
+### A5. Report
 
-```
-tsx scripts/ds/sync.ts --commit-lock
-```
-
-### A7. Clean up
-
-Delete `.sync-plan.json`. Keep `.figma-cache/variables.json`.
+- N variables created
+- N variables updated
+- N variables skipped (manual-protected or non-variable types)
+- N confirmations pending (deletes)
+- Manual items listed
 
 ---
 
@@ -117,20 +131,11 @@ Create a frame titled "Colors" (or update the existing one).
 **Status colors section** — 4-column grid (error, success, warning, info):
 - Each column: label | bg swatch | fg swatch | border swatch
 
-```javascript
-// Pseudocode for use_figma call
-figma.createFrame({
-  name: "Colors",
-  width: 1440,
-  // ... populate with above layout using tokens from tokens.json
-})
-```
-
 ### B2. Typography page
 
 Create a frame titled "Typography" (or update the existing one).
 
-Layout: **3 columns** — Desktop | Tablet | Mobile — like the Boodschappen typography documentation.
+Layout: **3 columns** — Desktop | Tablet | Mobile.
 
 For each column (breakpoint), show the full type scale:
 
@@ -138,38 +143,26 @@ For each column (breakpoint), show the full type scale:
 - Display / H1 through H6: sample text "The quick brown fox jumps over the lazy dog"
 - Each row: role name + specs below (e.g. `font.size.5xl / weight.light / lineHeight.tight`)
 
-**Titles section** (label "TITLES"):
-- Subtitle, Card title: sample text
-
 **Body text section** (label "BODY TEXT"):
 - Body large through xs: sample text
 
 **Call to action section** (label "CALL TO ACTION"):
-- Action link, Nav main, Nav secondary, Tag button text, Body link
-
-**Text fields section** (label "TEXT FIELD"):
-- Text field label, helper text
-
-At different breakpoints the font sizes change (use `breakpoint.*` tokens to calculate).
-If only one size is defined per stop, use it for all breakpoints.
+- Action link, Nav main, Nav secondary, Tag button text
 
 ### B3. Spacing page
 
 Create a frame titled "Spacing" (or update the existing one).
 
 Follow the IBM Carbon spacing specification pattern:
-- Two panels side by side: "Specification" table + "Utility" visual
 
 **Specification table**:
 ```
-Token          | rem    | px   | Example (rectangle)
-space.1        | 0.25   | 4    | ▌ (4px wide)
-space.2        | 0.5    | 8    | ▌▌ (8px wide)
-space.4        | 1.0    | 16   | ▌▌▌▌ (16px wide)
+Token     | rem    | px   | Example
+space.1   | 0.25   | 4    | ▌ (4px wide)
+space.4   | 1.0    | 16   | ▌▌▌▌
 ...
 ```
-Rectangles should be proportional — scale from 4px to the largest space value.
-Use the brand primary color (at 20% opacity) + a filled version for alternating rows.
+Rectangles should be proportional. Use brand primary at 20% opacity.
 
 **Radius section** below:
 - Rounded squares showing each radius value: radius.none → radius.full
@@ -180,107 +173,63 @@ Use the brand primary color (at 20% opacity) + a filled version for alternating 
 Create a frame titled "Grid" (or update the existing one).
 
 For each breakpoint (`breakpoint.sm` through `breakpoint.2xl`), create a browser
-chrome frame at that width showing:
-- The column grid overlay (use `color.brand.primary` at 10% opacity for column fills,
-  and the gutter/margin as empty space)
-- Column count, gutter width, and margin width as annotations
-- Frame label: "Desktop", "Tablet", "Mobile"
-- Include a simple content placeholder (2–3 grey boxes) to show how content flows
-
-Show columns in a pink/purple tint (like the Boodschappen reference) so they stand out.
+chrome frame at that width showing the column grid overlay, column count,
+gutter width, margin width as annotations.
 
 ### B5. Buttons page (best effort)
 
-Create a frame titled "Buttons" if the project has button-related tokens
-(`color.interactive.*` or explicit `color.button.*` tokens).
+Create a frame titled "Buttons" if the project has `color.interactive.*` tokens.
 
-**Variant × State matrix** (like the Boodschappen button documentation):
-- Rows: Default, Hover (simulated), Focused, Disabled, Destructive
-- Columns: Primary, Secondary, Ghost/Outline, Danger, (Icon-only if applicable)
-- Each cell: the button at that variant/state
-- Left of each row: state label
-- Above each column: variant label (teal/green accent like Boodschappen)
-
-Button specs come from:
-- Background: `color.interactive.{primary,hover,active,disabled}`
-- Text size: `font.size.md` or `font.size.sm`
-- Radius: `radius.md` or `radius.full` depending on the project
-- Height: typically `space.10` (40px) or `space.12` (48px)
-- Padding: `space.4` horizontal
-
-If button tokens don't exist yet, create a simplified 2-variant (primary/secondary)
-× 4-state (default/hover/focused/disabled) matrix using the interactive colors.
+**Variant × State matrix**:
+- Rows: Default, Hover, Focused, Disabled, Destructive
+- Columns: Primary, Secondary, Ghost/Outline, Danger
 
 ### B6. Form elements page (best effort)
 
-Create a frame titled "Form Elements" if the project has input-related tokens.
+Create a frame titled "Form Elements" if input-related tokens exist.
 
-Following the Boodschappen form elements documentation pattern:
-
-**Input fields section**:
 - 5 columns: Default | Hover | Focused | Disabled | Error
-- 2 rows: Empty | Filled
-- Each cell: the input field at that state, with label above and error text below (error state)
-
-**Checkboxes section**:
-- Same 5 states × 2 rows (unselected / selected)
-
-**Radio buttons section**:
-- Same 5 states × 2 rows (unselected / selected)
-
-If select/dropdown tokens exist, add a **Select section** in the same pattern.
+- Rows: input fields, checkboxes, radio buttons
 
 ### B7. Icons page
 
-Create a frame titled "Icons" (simplified — just a reference placeholder).
-
-- Title: "Icons"
-- Note the icon library source (if known from the project, e.g. "Google Material Icons — https://fonts.google.com/icons" or "Heroicons")
-- Group any icons found in the Figma file into categories matching the Boodschappen pattern:
-  - Basis (basic UI icons)
-  - Richtingen (directional/arrow icons)
-  - Domain-specific categories
-
-If no icons are in the Figma file, show a placeholder frame with the external icon source URL.
+Create a placeholder frame titled "Icons" noting the icon library source.
 
 ---
 
 ## Fallback: MCP writes unavailable
 
-If the Dev Mode MCP has no write tools, skip Part A step A4 and render a
+If the Dev Mode MCP has no write tools, skip Part A steps A3–A4 and render a
 single Markdown checklist for the user to apply manually in Figma:
 
 ```
 Manual Figma variable updates:
 [ ] color/brand/primary/500 (COLOR): #3b82f6
-[ ] color/brand/primary/600 (COLOR): #2563eb
 [ ] space/4 (FLOAT): 16
 ...
 ```
 
-Do not claim a sync succeeded when it was manual-only. Skip `--commit-lock`.
+Do not claim a sync succeeded when it was manual-only.
 
 If `use_figma` is unavailable for Part B, generate a Markdown spec for
 each documentation page that the user (or designer) can follow in Figma.
 
 ---
 
-## Fallbacks & constraints
+## Constraints
 
-- Never push when `npm run ds:sync:dry` shows conflicts.
-- Always confirm `delete-variable` operations individually.
-- **Manual-protected tokens** (`shadow`, `cubicBezier`, anything marked
-  `syncCapability: "manual-protected"` in `figma-map.json`) appear under
-  `manual`, never `operations`.
-- **Alias tokens** are never overwritten by a figma-to-code apply.
+- Never push when there are unresolved conflicts (same token changed in both
+  tokens.json and Figma since the last known state).
+- Always confirm `delete_variable` operations individually — they are destructive.
+- **Shadow and cubicBezier tokens** always go to the manual list, never to operations.
 
 ## Output checklist
 
-- [ ] `.figma-cache/variables.json` refreshed this run
-- [ ] `npm run ds:sync:dry` showed `0 conflicts`
-- [ ] Every `operations` entry either succeeded via MCP or moved to manual list
-- [ ] Manual items surfaced to the user as a checklist
-- [ ] `tokens.lock.json` committed (only if no manual-only ops remain)
+- [ ] Flat map built from `tokens.json`
+- [ ] Current Figma state loaded via `get_variable_defs`
+- [ ] Change summary surfaced and confirmed
+- [ ] Every `create`/`update` entry either succeeded via MCP or moved to manual list
+- [ ] Manual items surfaced as a checklist
 - [ ] Colors documentation page created/updated in Figma
 - [ ] Typography documentation page created/updated in Figma
 - [ ] Spacing documentation page created/updated in Figma
@@ -288,4 +237,4 @@ each documentation page that the user (or designer) can follow in Figma.
 - [ ] Buttons page created/updated (or skipped with note)
 - [ ] Form elements page created/updated (or skipped with note)
 - [ ] Icons page created/updated (or placeholder added)
-- [ ] Summary delivered: N upserted, N deleted, N manual, N Figma pages updated
+- [ ] Summary delivered: N created, N updated, N manual, N Figma pages updated
