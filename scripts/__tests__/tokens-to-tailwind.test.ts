@@ -19,6 +19,32 @@ const sample: DtcgGroup = {
   },
 };
 
+const extendedSample: DtcgGroup = {
+  ...sample,
+  letterSpacing: {
+    tight:  { $type: "dimension", $value: "-0.025em" },
+    normal: { $type: "dimension", $value: "0em" },
+    wide:   { $type: "dimension", $value: "0.025em" },
+  },
+  borderWidth: {
+    default: { $type: "dimension", $value: "1px" },
+    thick:   { $type: "dimension", $value: "2px" },
+  },
+  opacity: {
+    disabled: { $type: "number", $value: 0.4 },
+    hover:    { $type: "number", $value: 0.08 },
+  },
+  breakpoint: {
+    sm:  { $type: "dimension", $value: "480px" },
+    md:  { $type: "dimension", $value: "768px" },
+    lg:  { $type: "dimension", $value: "1024px" },
+  },
+  zIndex: {
+    dropdown: { $type: "number", $value: 10 },
+    modal:    { $type: "number", $value: 40 },
+  },
+};
+
 describe("cssVarName", () => {
   it("replaces dots with dashes", () => {
     expect(cssVarName("color.brand.primary")).toBe("--color-brand-primary");
@@ -44,6 +70,58 @@ describe("emit", () => {
     expect(tailwindBlock).toContain("var(--font-family-sans)");
     expect(tailwindBlock).toContain("BEGIN GENERATED");
     expect(tailwindBlock).toContain("END GENERATED");
+  });
+
+  it("emits letterSpacing tokens to css and tailwind", () => {
+    const { css, tailwindBlock } = emit(extendedSample);
+    expect(css).toContain("--letter-spacing-tight: -0.025em;");
+    expect(css).toContain("--letter-spacing-normal: 0em;");
+    expect(css).toContain("--letter-spacing-wide: 0.025em;");
+    expect(tailwindBlock).toContain('"letterSpacing"');
+    expect(tailwindBlock).toContain("var(--letter-spacing-tight)");
+  });
+
+  it("emits borderWidth tokens to css and tailwind", () => {
+    const { css, tailwindBlock } = emit(extendedSample);
+    expect(css).toContain("--border-width-default: 1px;");
+    expect(css).toContain("--border-width-thick: 2px;");
+    expect(tailwindBlock).toContain('"borderWidth"');
+    expect(tailwindBlock).toContain("var(--border-width-default)");
+  });
+
+  it("emits opacity tokens to css and tailwind", () => {
+    const { css, tailwindBlock } = emit(extendedSample);
+    expect(css).toContain("--opacity-disabled: 0.4;");
+    expect(css).toContain("--opacity-hover: 0.08;");
+    expect(tailwindBlock).toContain('"opacity"');
+    expect(tailwindBlock).toContain("var(--opacity-disabled)");
+  });
+
+  it("emits breakpoint tokens as raw values in tailwind screens (not var references)", () => {
+    const { css, tailwindBlock } = emit(extendedSample);
+    // CSS var is emitted
+    expect(css).toContain("--breakpoint-sm: 480px;");
+    // Tailwind screens uses raw value, not var()
+    expect(tailwindBlock).toContain('"screens"');
+    expect(tailwindBlock).toContain('"sm": "480px"');
+    expect(tailwindBlock).toContain('"md": "768px"');
+    expect(tailwindBlock).toContain('"lg": "1024px"');
+    expect(tailwindBlock).not.toMatch(/"sm":\s*"var\(/);
+  });
+
+  it("emits zIndex tokens to css and tailwind", () => {
+    const { css, tailwindBlock } = emit(extendedSample);
+    expect(css).toContain("--z-index-dropdown: 10;");
+    expect(css).toContain("--z-index-modal: 40;");
+    expect(tailwindBlock).toContain('"zIndex"');
+    expect(tailwindBlock).toContain("var(--z-index-dropdown)");
+  });
+
+  it("omits empty theme slices from the tailwind block", () => {
+    const { tailwindBlock } = emit(sample);
+    // sample has no letterSpacing/borderWidth/opacity/breakpoint/zIndex
+    // they should still be present as empty objects (no crash)
+    expect(tailwindBlock).toContain('"letterSpacing"');
   });
 });
 

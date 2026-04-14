@@ -36,9 +36,14 @@ export function emit(tree: DtcgGroup): EmitResult {
   };
 }
 
-/** A token path like `color.brand.primary.500` becomes the CSS var `--color-brand-primary-500`. */
+/**
+ * A token path like `color.brand.primary.500` becomes the CSS var `--color-brand-primary-500`.
+ * camelCase group names (e.g. `letterSpacing`, `borderWidth`, `zIndex`) are converted to
+ * kebab-case so the resulting variable follows CSS conventions.
+ */
 export function cssVarName(path: string): string {
-  return `--${path.replace(/\./g, "-")}`;
+  const kebab = path.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+  return `--${kebab.replace(/\./g, "-")}`;
 }
 
 function emitCss(tokens: FlatToken[]): string {
@@ -98,9 +103,14 @@ function emitTailwind(tokens: FlatToken[]): string {
   const fontSize: Record<string, string> = {};
   const fontWeight: Record<string, string> = {};
   const lineHeight: Record<string, string> = {};
+  const letterSpacing: Record<string, string> = {};
+  const borderWidth: Record<string, string> = {};
+  const opacity: Record<string, string> = {};
   const boxShadow: Record<string, string> = {};
   const transitionDuration: Record<string, string> = {};
   const transitionTimingFunction: Record<string, string> = {};
+  const screens: Record<string, string> = {};
+  const zIndex: Record<string, string> = {};
 
   for (const t of tokens) {
     const v = `var(${cssVarName(t.path)})`;
@@ -119,12 +129,29 @@ function emitTailwind(tokens: FlatToken[]): string {
       case "font":
         handleFont(t, tail, { fontFamily, fontSize, fontWeight, lineHeight });
         break;
+      case "letterSpacing":
+        letterSpacing[tail] = v;
+        break;
+      case "borderWidth":
+        borderWidth[tail] = v;
+        break;
+      case "opacity":
+        opacity[tail] = v;
+        break;
       case "shadow":
         boxShadow[tail] = v;
         break;
       case "motion":
         if (t.path.startsWith("motion.duration.")) transitionDuration[tail.replace(/^duration-/, "")] = v;
         if (t.path.startsWith("motion.easing."))   transitionTimingFunction[tail.replace(/^easing-/, "")] = v;
+        break;
+      case "breakpoint":
+        // Tailwind screens expects raw CSS values, not var() references.
+        // Emit the resolved value directly so Tailwind can process breakpoints at build time.
+        screens[tail] = String(t.value);
+        break;
+      case "zIndex":
+        zIndex[tail] = v;
         break;
     }
   }
@@ -137,9 +164,14 @@ function emitTailwind(tokens: FlatToken[]): string {
     fontSize,
     fontWeight,
     lineHeight,
+    letterSpacing,
+    borderWidth,
+    opacity,
     boxShadow,
     transitionDuration,
     transitionTimingFunction,
+    screens,
+    zIndex,
   };
 
   // JSON.stringify produces valid TS here because every value is a string or nested object.
