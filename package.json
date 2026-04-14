@@ -24,6 +24,6 @@
     "tailwindcss": "^3.4.0"
   },
   "notes": {
-    "storybook": "Storybook deps (@storybook/react-vite, storybook, storybook-design-token, react, react-dom, vite) are added on demand by the build-ds-code skill when Storybook is first scaffolded. They are intentionally kept out of the baseline install to avoid forcing a React dep on token-only users."
+    "storybook": "Storybook deps (@storybook/react-vite, storybook, storybook-design-token, react, react-dom, vite) are added on demand by the figma-to-code-design-system skill when Storybook is first scaffolded. They are intentionally kept out of the baseline install to avoid forcing a React dep on token-only users."
   }
 }

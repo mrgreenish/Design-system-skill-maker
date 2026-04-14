@@ -12,11 +12,20 @@
  * Cache schema is deliberately tolerant of the MCP server's format churn:
  * we accept both a flat `{ "color/brand/primary": "#4f46e5" }` map (the
  * shape Dev Mode MCP currently emits) and an explicit variables array.
+ *
+ * When figma-map.json is present, type overrides and unit hints in the map
+ * replace the heuristic guesses (e.g. every FLOAT → dimension). Without a
+ * map the heuristics remain active as a graceful fallback.
  */
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DtcgType, FlatToken } from "./tokens.ts";
+import {
+  type FigmaMap,
+  getTokenMapping,
+  reconstructValue,
+} from "./figma-map.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CACHE = resolve(ROOT, ".figma-cache/variables.json");
@@ -39,28 +48,42 @@ export function nameToPath(name: string): string {
   return name.replace(/\//g, ".");
 }
 
-export function figmaToFlat(cache: FigmaCache): FlatToken[] {
+/**
+ * Convert the Figma variable cache to a FlatToken array.
+ *
+ * When `map` is provided, per-token type overrides and unit hints are applied:
+ *   - type override: corrects FLOAT → fontWeight / duration / number instead
+ *     of blindly mapping everything to "dimension".
+ *   - unit hint: reconstructs "16px" from the unitless Figma FLOAT 16.
+ */
+export function figmaToFlat(cache: FigmaCache, map?: FigmaMap | null): FlatToken[] {
   const out: FlatToken[] = [];
   if (cache.variables) {
     for (const v of cache.variables) {
-      const type = mapType(v.type, v.value);
+      const path = nameToPath(v.name);
+      const mapping = getTokenMapping(map ?? null, path);
+      const type = mapping.type ?? mapType(v.type, v.value);
       if (!type) continue;
+      const rawValue = reconstructValue(v.value, mapping);
       out.push({
-        path: nameToPath(v.name),
+        path,
         type,
-        value: v.value,
-        rawValue: v.value,
+        value: rawValue,
+        rawValue,
         description: v.description,
       });
     }
   } else if (cache.flat) {
     for (const [name, value] of Object.entries(cache.flat)) {
-      const type = inferType(value);
+      const path = nameToPath(name);
+      const mapping = getTokenMapping(map ?? null, path);
+      const type = mapping.type ?? inferType(value);
+      const reconstructed = reconstructValue(value, mapping);
       out.push({
-        path: nameToPath(name),
+        path,
         type,
-        value,
-        rawValue: value,
+        value: reconstructed,
+        rawValue: reconstructed,
       });
     }
   }
@@ -80,7 +103,6 @@ function mapType(figmaType: string, value: unknown): DtcgType | null {
 
 function inferType(value: string | number): DtcgType {
   if (typeof value === "number") return "dimension";
-  // Simple heuristic: hex color string
   if (/^#[0-9a-fA-F]{3,8}$/.test(value)) return "color";
   if (/^-?\d+(\.\d+)?(px|rem|em|%)$/.test(value)) return "dimension";
   if (/^\d+ms$/.test(value)) return "duration";

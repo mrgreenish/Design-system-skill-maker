@@ -1,0 +1,20 @@
+{
+  "$description": "Merge these entries into the target project's package.json when running setup-design-system. Add scripts verbatim; add devDependencies only if not already present (preserve existing version if already pinned).",
+  "scripts": {
+    "ds:build": "tsx scripts/ds/tokens-to-tailwind.ts",
+    "ds:sync": "tsx scripts/ds/sync.ts",
+    "ds:sync:dry": "tsx scripts/ds/sync.ts --dry-run"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  },
+  "dependencies": {
+    "tailwindcss": "^3.4.0"
+  },
+  "notes": {
+    "storybook": "Storybook deps (@storybook/react-vite, storybook, storybook-design-token, react, react-dom, vite) are added on demand by the figma-to-code-design-system skill when Storybook is first scaffolded. They are intentionally kept out of the baseline install to avoid forcing a React dep on token-only users."
+  }
+}

@@ -118,9 +118,21 @@ function lookup(root: DtcgGroup, dotted: string): DtcgToken | null {
   return isToken(cur) ? cur : null;
 }
 
-/** Deterministic hash of a flat token's value+type, for lock-file comparisons. */
-export function hashToken(t: Pick<FlatToken, "type" | "rawValue">): string {
-  const canonical = JSON.stringify({ type: t.type, value: t.rawValue });
+/**
+ * Deterministic hash of a flat token's resolved value + type, for lock-file
+ * comparisons.
+ *
+ * We hash the RESOLVED value (not rawValue) so that alias tokens like
+ * `color.semantic.bg.default = {color.neutral.0}` produce the same hash as
+ * the concrete value Figma stores. Without this, every sync run sees aliased
+ * tokens as "changed-figma" even when nothing actually changed.
+ *
+ * NOTE: tokens.lock.json written with this algorithm uses version: 2.
+ * Older v1 lock files (which hashed rawValue) are treated as missing by
+ * sync.ts — run `tsx scripts/sync.ts --commit-lock` once to rebuild.
+ */
+export function hashToken(t: Pick<FlatToken, "type" | "value">): string {
+  const canonical = JSON.stringify({ type: t.type, value: t.value });
   return createHash("sha256").update(canonical).digest("hex").slice(0, 16);
 }
 

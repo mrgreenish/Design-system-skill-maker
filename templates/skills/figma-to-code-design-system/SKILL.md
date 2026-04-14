@@ -1,18 +1,18 @@
 ---
-name: build-ds-code
+name: figma-to-code-design-system
 description: Builds the design system in code from tokens.json. Regenerates tailwind.config.ts (generated block) and src/styles/tokens.css, and scaffolds / updates Storybook with token-gallery stories. Use when tokens.json has changed, or when setting up the code side from scratch.
 ---
 
-# build-ds-code
+# figma-to-code-design-system
 
 ## When to use
 
 - User says "regenerate the design system", "rebuild tokens", "update Tailwind from tokens."
-- After `tokens.json` has been edited (directly or by `sync-code-to-figma` /
-  `create-figma-ds-skill`).
+- After `tokens.json` has been edited (directly or by `code-to-figma-design-system` /
+  `setup-design-system`).
 - First-time Storybook scaffold for a project.
 
-Do NOT use this skill to push changes INTO Figma — that's `sync-code-to-figma`.
+Do NOT use this skill to push changes INTO Figma — that's `code-to-figma-design-system`.
 
 ## Steps
 
@@ -20,7 +20,7 @@ Do NOT use this skill to push changes INTO Figma — that's `sync-code-to-figma`
    `conflict`, stop and direct the user to resolve them first (see
    `sync-conflict.md`).
 
-2. **Regenerate code.** Run `npm run ds:build` (= `tsx scripts/tokens-to-tailwind.ts`).
+2. **Regenerate code.** Run `npm run ds:build` (= `tsx scripts/ds/tokens-to-tailwind.ts`).
    This writes:
    - `src/styles/tokens.css` — fully generated.
    - `tailwind.config.ts` — the block between `BEGIN GENERATED` /
@@ -62,7 +62,7 @@ Do NOT use this skill to push changes INTO Figma — that's `sync-code-to-figma`
 
 - **Tailwind typecheck error on `fontFamily`** — the generated block must
   emit plain arrays (not `as const`); that's already handled by
-  `scripts/tokens-to-tailwind.ts`. If you see readonly errors, check that
+  `scripts/ds/tokens-to-tailwind.ts`. If you see readonly errors, check that
   no one edited the transform to re-add `as const`.
 - **Storybook Design Tokens panel empty** — ensure
   `.storybook/main.ts` points `storybook-design-token.glob` at

@@ -1,9 +1,9 @@
 ---
-name: sync-code-to-figma
+name: code-to-figma-design-system
 description: Pushes design token changes from the code side (tokens.json) into Figma via the Dev Mode MCP. Reads current Figma state through MCP, diffs against tokens.lock.json, then executes variable upserts/deletes. Use when the user edits tokens.json (or Tailwind-driven code) and wants Figma to reflect those changes.
 ---
 
-# sync-code-to-figma
+# code-to-figma-design-system
 
 ## When to use
 
@@ -13,32 +13,37 @@ description: Pushes design token changes from the code side (tokens.json) into F
   push.
 
 Do NOT use this skill to pull Figma changes into code — run
-`scripts/sync.ts --direction=figma-to-code` instead (after refreshing the
+`scripts/ds/sync.ts --direction=figma-to-code` instead (after refreshing the
 MCP cache, as step 1 below).
 
 ## Prerequisites
 
 - Figma Dev Mode MCP connected, with the file open in Figma desktop.
-- `figma-map.json` present (produced by `create-figma-ds-skill`). If it's
-  missing, stop and tell the user to run `create-figma-ds-skill` first.
+- `figma-map.json` present (produced by `setup-design-system`). If it's
+  missing, stop and tell the user to run `setup-design-system` first.
+  Without it, numeric types (`fontWeight`, `duration`, dimensions with units)
+  will be lossy on a Figma-to-code round-trip.
 
 ## Steps
 
 1. **Refresh the Figma cache.** Call the Dev Mode MCP tool `get_variable_defs`
    for the file's variable collections (ids are in `figma-map.json`). Write
    the result to `.figma-cache/variables.json` in the schema documented in
-   `scripts/figma-read.ts` (the `variables[]` array form is preferred).
+   `scripts/ds/figma-read.ts` (the `variables[]` array form is preferred).
 
 2. **Dry-run the sync.** Run:
    ```
    npm run ds:sync:dry -- --direction=code-to-figma
    ```
-   Read the summary. If conflicts > 0, stop and surface `sync-conflict.md`
-   to the user — do not attempt writes.
+   Read the stdout summary. If conflicts > 0, stop and run the full sync
+   (without `--dry-run`) to generate `sync-conflict.md`, then surface it
+   to the user — do not attempt writes until all conflicts are resolved.
+   Note: `--dry-run` only prints to stdout; it does **not** write
+   `sync-conflict.md` or any other file.
 
 3. **Build the plan.** Run:
    ```
-   tsx scripts/sync.ts --direction=code-to-figma
+   tsx scripts/ds/sync.ts --direction=code-to-figma
    ```
    This writes `.sync-plan.json` with two arrays: `operations` (doable via
    MCP) and `manual` (types like `shadow` / `cubicBezier` that Figma
@@ -61,7 +66,7 @@ MCP cache, as step 1 below).
 6. **Commit the lock.** Once all operations succeed (or the user accepts the
    manual items), run:
    ```
-   tsx scripts/sync.ts --commit-lock
+   tsx scripts/ds/sync.ts --commit-lock
    ```
    This writes the merged hash set to `tokens.lock.json` so future diffs
    have a clean baseline.
@@ -79,6 +84,15 @@ MCP cache, as step 1 below).
   user through conflict resolution first.
 - Always confirm `delete-variable` operations individually, even if the
   user approved the overall sync.
+- **Manual-protected tokens** (`shadow`, `cubicBezier`, anything marked
+  `syncCapability: "manual-protected"` in `figma-map.json`) appear in
+  `.sync-plan.json` under `manual`, not `operations`. Surface these as a
+  Figma Effects / Easing UI checklist to the user; do not block the rest
+  of the sync on them. They are never auto-deleted from `tokens.json`.
+- **Alias tokens** in `tokens.json` (values like `{color.neutral.0}`) are
+  never overwritten by a figma-to-code apply. If Figma diverges from the
+  resolved alias value, sync warns the user to update the alias target
+  (the primitive token) instead.
 
 ## Output checklist
 

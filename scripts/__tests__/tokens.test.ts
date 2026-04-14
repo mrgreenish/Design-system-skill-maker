@@ -41,16 +41,24 @@ describe("flatten", () => {
 describe("hashToken", () => {
   it("is stable across identical inputs", () => {
     expect(
-      hashToken({ type: "color", rawValue: "#fff" }),
-    ).toEqual(hashToken({ type: "color", rawValue: "#fff" }));
+      hashToken({ type: "color", value: "#fff" }),
+    ).toEqual(hashToken({ type: "color", value: "#fff" }));
   });
 
   it("differs when type or value differs", () => {
-    const a = hashToken({ type: "color", rawValue: "#fff" });
-    const b = hashToken({ type: "color", rawValue: "#000" });
-    const c = hashToken({ type: "dimension", rawValue: "#fff" });
+    const a = hashToken({ type: "color", value: "#fff" });
+    const b = hashToken({ type: "color", value: "#000" });
+    const c = hashToken({ type: "dimension", value: "#fff" });
     expect(a).not.toBe(b);
     expect(a).not.toBe(c);
+  });
+
+  it("produces the same hash for alias and its resolved value (round-trip safety)", () => {
+    // An alias token and its primitive resolve to the same concrete value.
+    // They must hash identically so the diff sees them as "unchanged".
+    const primitiveHash = hashToken({ type: "color", value: "#4f46e5" });
+    const aliasHash = hashToken({ type: "color", value: "#4f46e5" }); // resolved
+    expect(primitiveHash).toBe(aliasHash);
   });
 });
 

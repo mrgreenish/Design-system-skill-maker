@@ -5,7 +5,7 @@
  * MCP write tools. The plan is side-effect-free for Node; all real writes
  * happen through MCP.
  *
- * Plan schema (consumed by the sync-code-to-figma skill):
+ * Plan schema (consumed by the code-to-figma-design-system skill):
  *
  *   {
  *     "fileKey": "...",
@@ -24,6 +24,7 @@
 
 import type { DiffEntry } from "./diff-tokens.ts";
 import type { FlatToken } from "./tokens.ts";
+import { type FigmaMap, getTokenMapping } from "./figma-map.ts";
 
 export interface WriteOp {
   op: "upsert-variable" | "delete-variable";
@@ -41,11 +42,17 @@ export interface WritePlan {
   manual: Array<{ name: string; reason: string }>;
 }
 
-/** Build the code→figma plan from a diff + the code-side flat tokens. */
+/**
+ * Build the code→figma plan from a diff + the code-side flat tokens.
+ *
+ * When `map` is provided, the per-token `figmaName` override is used for the
+ * Figma variable name instead of the default slash-path conversion.
+ */
 export function buildPlan(
   diff: DiffEntry[],
   codeTokens: FlatToken[],
   fileKey?: string,
+  map?: FigmaMap | null,
 ): WritePlan {
   const codeByPath = new Map(codeTokens.map((t) => [t.path, t]));
   const ops: WriteOp[] = [];
@@ -61,17 +68,19 @@ export function buildPlan(
     const t = codeByPath.get(e.path);
     if (!t) continue;
     const mapped = toFigma(t);
+    const varName = getTokenMapping(map ?? null, e.path).figmaName ?? pathToName(e.path);
     if (!mapped) {
-      manual.push({ name: pathToName(e.path), reason: `No Figma variable mapping for DTCG type "${t.type}"` });
+      manual.push({ name: varName, reason: `No Figma variable mapping for DTCG type "${t.type}"` });
       continue;
     }
-    ops.push({ op: "upsert-variable", name: pathToName(e.path), ...mapped, description: t.description });
+    ops.push({ op: "upsert-variable", name: varName, ...mapped, description: t.description });
   }
 
   // Removals: tokens present in figma/lock but not in code.
   for (const e of diff) {
     if (e.status === "removed-code") {
-      ops.push({ op: "delete-variable", name: pathToName(e.path) });
+      const varName = getTokenMapping(map ?? null, e.path).figmaName ?? pathToName(e.path);
+      ops.push({ op: "delete-variable", name: varName });
     }
   }
 
