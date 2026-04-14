@@ -11,8 +11,8 @@
  * losing them on regeneration.
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 import { flatten, type DtcgGroup, type FlatToken } from "./tokens.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -209,6 +209,7 @@ export async function run(): Promise<void> {
   const tree = JSON.parse(readFileSync(TOKENS, "utf8")) as DtcgGroup;
   const { tailwindBlock, css } = emit(tree);
 
+  mkdirSync(dirname(TOKENS_CSS), { recursive: true });
   writeFileSync(TOKENS_CSS, css);
 
   const existingTailwind = existsSync(TAILWIND)

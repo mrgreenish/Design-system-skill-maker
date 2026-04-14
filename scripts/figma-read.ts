@@ -17,7 +17,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DtcgType, FlatToken } from "./tokens.ts";
-import { hashAll } from "./tokens.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CACHE = resolve(ROOT, ".figma-cache/variables.json");
@@ -91,8 +90,4 @@ function inferType(value: string | number): DtcgType {
 export function loadCache(path = CACHE): FigmaCache | null {
   if (!existsSync(path)) return null;
   return JSON.parse(readFileSync(path, "utf8")) as FigmaCache;
-}
-
-export function figmaHashes(cache: FigmaCache): Record<string, string> {
-  return hashAll(figmaToFlat(cache));
 }

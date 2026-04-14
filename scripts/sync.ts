@@ -99,10 +99,10 @@ async function main() {
   // Decide direction.
   const wantCodeToFigma =
     args.direction === "code-to-figma" ||
-    (args.direction === "auto" && summary.oneSided.some((e) => e.status.endsWith("-code") || e.status === "removed-figma"));
+    (args.direction === "auto" && summary.oneSided.some((e) => e.status.endsWith("-code")));
   const wantFigmaToCode =
     args.direction === "figma-to-code" ||
-    (args.direction === "auto" && summary.oneSided.some((e) => e.status.endsWith("-figma") || e.status === "removed-code"));
+    (args.direction === "auto" && summary.oneSided.some((e) => e.status.endsWith("-figma")));
 
   if (wantFigmaToCode && !args.dryRun) {
     applyFigmaToCode(tree, figmaFlat, diff);
@@ -194,8 +194,11 @@ function applyFigmaToCode(
       if (key.startsWith("$")) continue;
       const p = [...path, key].join(".");
       if (child && typeof child === "object" && "$value" in (child as Record<string, unknown>)) {
-        const f = figmaByPath.get(p);
-        if (f) (child as { $value: unknown }).$value = f.rawValue;
+        const st = statusByPath.get(p);
+        if (st === "changed-figma") {
+          const f = figmaByPath.get(p);
+          if (f) (child as { $value: unknown }).$value = f.rawValue;
+        }
       } else if (child && typeof child === "object") {
         walkUpdate(child as DtcgGroup, [...path, key]);
       }
