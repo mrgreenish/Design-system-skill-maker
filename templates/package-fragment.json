@@ -1,0 +1,9 @@
+{
+  "$description": "Reference only. The no-scripts architecture does not merge any scripts or devDependencies into the target project. All sync and build logic lives in the figma-to-code-design-system and code-to-figma-design-system skills. Target projects need no additional npm scripts or TypeScript tooling to use the design system.",
+  "notes": {
+    "no-scripts": "Skills read/write tokens.json, CSS vars, Tailwind config, and SCSS directly. No npm run ds:build or ds:sync commands are installed.",
+    "storybook": "If Storybook scaffolding is needed, the figma-to-code-design-system skill installs @storybook/react-vite and related packages on demand.",
+    "tailwindcss": "If the target project already has tailwindcss in package.json, the figma-to-code skill auto-detects the version and emits the appropriate config (v3 tailwind.config.ts block or v4 @theme block). No separate installation is needed.",
+    "scss": "If sass or sass-embedded is present, the skill also emits _tokens.scss alongside tokens.css."
+  }
+}

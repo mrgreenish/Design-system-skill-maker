@@ -1,0 +1,31 @@
+import { Meta, Typeset } from "@storybook/blocks";
+
+<Meta title="Tokens/Typography" />
+
+# Typography
+
+<Typeset
+  fontFamily="var(--font-family-sans)"
+  fontSizes={[
+    "var(--font-size-sm)",
+    "var(--font-size-md)",
+    "var(--font-size-lg)",
+    "var(--font-size-xl)",
+  ]}
+  sampleText="The quick brown fox jumps over the lazy dog."
+/>
+
+## Weights
+
+<div style={{ fontFamily: "var(--font-family-sans)" }}>
+  <p style={{ fontWeight: "var(--font-weight-regular)" }}>Regular — 400</p>
+  <p style={{ fontWeight: "var(--font-weight-medium)" }}>Medium — 500</p>
+  <p style={{ fontWeight: "var(--font-weight-bold)" }}>Bold — 700</p>
+</div>
+
+## Line heights
+
+<div style={{ fontFamily: "var(--font-family-sans)" }}>
+  <p style={{ lineHeight: "var(--font-lineHeight-tight)" }}>Tight (1.2) — Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam id libero id justo blandit luctus.</p>
+  <p style={{ lineHeight: "var(--font-lineHeight-normal)" }}>Normal (1.5) — Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam id libero id justo blandit luctus.</p>
+</div>

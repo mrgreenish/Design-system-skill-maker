@@ -1,0 +1,29 @@
+{
+  "name": "design-system-skill-maker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bi-directional Figma <-> Tailwind design-system sync, driven by Claude Code skills + hooks.",
+  "scripts": {
+    "ds:build": "tsx scripts/tokens-to-tailwind.ts",
+    "ds:sync": "tsx scripts/sync.ts",
+    "ds:sync:dry": "tsx scripts/sync.ts --dry-run",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "tailwindcss": "^3.4.0"
+  },
+  "notes": {
+    "storybook": "Storybook deps (@storybook/react-vite, storybook, storybook-design-token, react, react-dom, vite) are added on demand by the figma-to-code-design-system skill when Storybook is first scaffolded. They are intentionally kept out of the baseline install to avoid forcing a React dep on token-only users."
+  }
+}
